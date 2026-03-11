@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GCal Blocker</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .app {
+      background: white;
+      border-radius: 16px;
+      padding: 40px;
+      width: 100%;
+      max-width: 560px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    }
+    h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+    .subtitle { color: #666; font-size: 14px; margin-bottom: 32px; }
+    .section { margin-bottom: 24px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #444; margin-bottom: 8px; }
+    select, input {
+      width: 100%; padding: 10px 14px; border: 1.5px solid #e0e0e0;
+      border-radius: 8px; font-size: 14px; color: #333;
+      background: #fafafa; outline: none; transition: border 0.2s;
+    }
+    select:focus, input:focus { border-color: #4285f4; background: white; }
+    .row { display: flex; gap: 12px; }
+    .row .section { flex: 1; }
+    .btn {
+      width: 100%; padding: 12px; border: none; border-radius: 8px;
+      font-size: 15px; font-weight: 600; cursor: pointer; transition: 0.2s;
+    }
+    .btn-google {
+      background: white; color: #333; border: 1.5px solid #e0e0e0;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+    }
+    .btn-google:hover { background: #f5f5f5; }
+    .btn-primary { background: #4285f4; color: white; }
+    .btn-primary:hover { background: #3367d6; }
+    .btn-primary:disabled { background: #a8c4fb; cursor: not-allowed; }
+    .btn-stop { background: #ea4335; color: white; }
+    .btn-stop:hover { background: #c5221f; }
+    .status-bar {
+      margin-top: 20px; padding: 14px 16px; border-radius: 8px;
+      font-size: 13px; display: none;
+    }
+    .status-bar.info { background: #e8f0fe; color: #1a73e8; display: block; }
+    .status-bar.success { background: #e6f4ea; color: #137333; display: block; }
+    .status-bar.error { background: #fce8e6; color: #c5221f; display: block; }
+    .log {
+      margin-top: 16px; background: #f8f9fa; border-radius: 8px;
+      padding: 12px 14px; max-height: 200px; overflow-y: auto;
+      font-size: 12px; color: #555; display: none; line-height: 1.8;
+    }
+    .log.show { display: block; }
+    .log-entry { border-bottom: 1px solid #eee; padding: 4px 0; }
+    .log-entry:last-child { border: none; }
+    .badge {
+      display: inline-block; background: #e8f0fe; color: #1a73e8;
+      font-size: 11px; font-weight: 600; padding: 2px 8px;
+      border-radius: 12px; margin-left: 8px;
+    }
+    .step { display: none; }
+    .step.active { display: block; }
+    .setup-note {
+      background: #fffbea; border: 1px solid #f0c040; border-radius: 8px;
+      padding: 14px 16px; font-size: 13px; color: #6b4c00; margin-bottom: 20px;
+      line-height: 1.7;
+    }
+    .setup-note a { color: #1a73e8; }
+    .counter { font-size: 28px; font-weight: 700; color: #4285f4; margin: 8px 0; }
+    .counter span { font-size: 14px; font-weight: 400; color: #666; }
+    .sync-info { display: flex; gap: 20px; margin: 16px 0; }
+    .sync-stat { text-align: center; flex: 1; background: #f8f9fa; border-radius: 8px; padding: 12px; }
+    .sync-stat .num { font-size: 24px; font-weight: 700; color: #333; }
+    .sync-stat .lbl { font-size: 11px; color: #888; margin-top: 4px; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <h1>GCal Blocker 🗓</h1>
+  <p class="subtitle">サブカレンダーの予定をメインに自動ブロック</p>
+
+  <!-- Step 1: Setup -->
+  <div class="step active" id="step-setup">
+    <div class="setup-note">
+      <strong>初回のみ設定が必要です</strong><br>
+      1. <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> でプロジェクトを作成<br>
+      2. Google Calendar API を有効化<br>
+      3. OAuth 2.0 クライアントID を作成（種類: ウェブアプリ）<br>
+      4. 承認済みの JavaScript オリジンに <code>null</code> を追加（ローカルHTML用）<br>
+      5. クライアントIDを下に貼り付け
+    </div>
+    <div class="section">
+      <label>Google OAuth クライアントID</label>
+      <input type="text" id="client-id" placeholder="xxxx.apps.googleusercontent.com" />
+    </div>
+    <button class="btn btn-primary" onclick="initGapi()">次へ → Googleでログイン</button>
+  </div>
+
+  <!-- Step 2: Login -->
+  <div class="step" id="step-login">
+    <div class="section">
+      <p style="font-size:14px; color:#555; margin-bottom:16px;">
+        Googleアカウントでログインして、カレンダーへのアクセスを許可してください。
+      </p>
+      <button class="btn btn-google" onclick="signIn()">
+        <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18z"/><path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.8 4.8 0 0 1-7.18-2.54H1.83v2.07A8 8 0 0 0 8.98 17z"/><path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 0 1 0-3.04V5.41H1.83a8 8 0 0 0 0 7.18z"/><path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.4L4.5 7.49a4.77 4.77 0 0 1 4.48-3.3z"/></svg>
+        Googleでログイン
+      </button>
+    </div>
+  </div>
+
+  <!-- Step 3: Configure -->
+  <div class="step" id="step-config">
+    <div class="row">
+      <div class="section">
+        <label>📅 サブカレンダー（読み取り元）</label>
+        <select id="sub-cal"><option value="">読み込み中...</option></select>
+      </div>
+      <div class="section">
+        <label>📌 メインカレンダー（ブロック先）</label>
+        <select id="main-cal"><option value="">読み込み中...</option></select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="section">
+        <label>同期する期間（今日から何日先まで）</label>
+        <input type="number" id="days-ahead" value="30" min="1" max="365" />
+      </div>
+      <div class="section">
+        <label>自動同期の間隔（分）</label>
+        <input type="number" id="interval" value="15" min="1" max="60" />
+      </div>
+    </div>
+    <button class="btn btn-primary" id="start-btn" onclick="startSync()">同期を開始する</button>
+  </div>
+
+  <!-- Step 4: Running -->
+  <div class="step" id="step-running">
+    <div class="sync-info">
+      <div class="sync-stat">
+        <div class="num" id="stat-synced">0</div>
+        <div class="lbl">同期済みイベント</div>
+      </div>
+      <div class="sync-stat">
+        <div class="num" id="stat-blocked">0</div>
+        <div class="lbl">ブロック作成数</div>
+      </div>
+      <div class="sync-stat">
+        <div class="num" id="stat-next">--</div>
+        <div class="lbl">次回同期まで(分)</div>
+      </div>
+    </div>
+    <button class="btn btn-stop" onclick="stopSync()">同期を停止する</button>
+  </div>
+
+  <div class="status-bar" id="status"></div>
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+  const SCOPES = 'https://www.googleapis.com/auth/calendar';
+  let gapiReady = false;
+  let tokenClient = null;
+  let syncInterval = null;
+  let stats = { synced: 0, blocked: 0 };
+  let nextSyncMin = 0;
+  let countdownTimer = null;
+
+  // Storage keys
+  const STORAGE_KEY = 'gcal_blocker_events';
+
+  function setStatus(msg, type = 'info') {
+    const el = document.getElementById('status');
+    el.textContent = msg;
+    el.className = 'status-bar ' + type;
+  }
+
+  function addLog(msg) {
+    const log = document.getElementById('log');
+    log.classList.add('show');
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    const time = new Date().toLocaleTimeString('ja-JP');
+    entry.textContent = `[${time}] ${msg}`;
+    log.prepend(entry);
+    if (log.children.length > 50) log.removeChild(log.lastChild);
+  }
+
+  function showStep(id) {
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  function initGapi() {
+    const clientId = document.getElementById('client-id').value.trim();
+    if (!clientId) { setStatus('クライアントIDを入力してください', 'error'); return; }
+    localStorage.setItem('gcal_client_id', clientId);
+    setStatus('Google API を読み込み中...', 'info');
+
+    const script1 = document.createElement('script');
+    script1.src = 'https://apis.google.com/js/api.js';
+    script1.onload = () => {
+      gapi.load('client', async () => {
+        await gapi.client.init({ discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'] });
+        gapiReady = true;
+        loadTokenClient(clientId);
+      });
+    };
+    document.head.appendChild(script1);
+
+    const script2 = document.createElement('script');
+    script2.src = 'https://accounts.google.com/gsi/client';
+    script2.onload = () => { /* loaded */ };
+    document.head.appendChild(script2);
+  }
+
+  function loadTokenClient(clientId) {
+    const check = setInterval(() => {
+      if (typeof google !== 'undefined' && google.accounts) {
+        clearInterval(check);
+        tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: SCOPES,
+          callback: onTokenReceived,
+        });
+        showStep('step-login');
+        setStatus('ログインしてください', 'info');
+      }
+    }, 200);
+  }
+
+  function signIn() {
+    if (!tokenClient) { setStatus('初期化中です。少し待ってください', 'error'); return; }
+    tokenClient.requestAccessToken();
+  }
+
+  async function onTokenReceived(response) {
+    if (response.error) { setStatus('ログインに失敗しました: ' + response.error, 'error'); return; }
+    setStatus('カレンダー一覧を取得中...', 'info');
+    await loadCalendars();
+    showStep('step-config');
+  }
+
+  async function loadCalendars() {
+    try {
+      const res = await gapi.client.calendar.calendarList.list();
+      const cals = res.result.items;
+      const subSel = document.getElementById('sub-cal');
+      const mainSel = document.getElementById('main-cal');
+      subSel.innerHTML = '';
+      mainSel.innerHTML = '';
+      cals.forEach(cal => {
+        subSel.add(new Option(cal.summary, cal.id));
+        mainSel.add(new Option(cal.summary, cal.id));
+      });
+      // デフォルト: primaryをメインに設定
+      const primaryIdx = cals.findIndex(c => c.primary);
+      if (primaryIdx >= 0) mainSel.selectedIndex = primaryIdx;
+      setStatus('カレンダーを選択してください', 'info');
+    } catch (e) {
+      setStatus('カレンダー取得エラー: ' + e.message, 'error');
+    }
+  }
+
+  async function startSync() {
+    const subId = document.getElementById('sub-cal').value;
+    const mainId = document.getElementById('main-cal').value;
+    if (subId === mainId) { setStatus('サブとメインに同じカレンダーは選べません', 'error'); return; }
+    localStorage.setItem('gcal_sub', subId);
+    localStorage.setItem('gcal_main', mainId);
+
+    showStep('step-running');
+    setStatus('同期を開始しました', 'success');
+    addLog('同期開始');
+
+    await runSync();
+
+    const intervalMin = parseInt(document.getElementById('interval').value) || 15;
+    syncInterval = setInterval(runSync, intervalMin * 60 * 1000);
+    startCountdown(intervalMin);
+  }
+
+  function startCountdown(min) {
+    nextSyncMin = min;
+    if (countdownTimer) clearInterval(countdownTimer);
+    countdownTimer = setInterval(() => {
+      nextSyncMin--;
+      document.getElementById('stat-next').textContent = nextSyncMin;
+      if (nextSyncMin <= 0) nextSyncMin = parseInt(document.getElementById('interval')?.value) || 15;
+    }, 60000);
+    document.getElementById('stat-next').textContent = min;
+  }
+
+  async function runSync() {
+    const subId = localStorage.getItem('gcal_sub');
+    const mainId = localStorage.getItem('gcal_main');
+    const daysAhead = parseInt(document.getElementById('days-ahead')?.value) || 30;
+
+    setStatus('同期中...', 'info');
+    addLog('同期実行中');
+
+    const now = new Date();
+    const future = new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000);
+
+    try {
+      // サブカレンダーのイベント取得
+      const res = await gapi.client.calendar.events.list({
+        calendarId: subId,
+        timeMin: now.toISOString(),
+        timeMax: future.toISOString(),
+        singleEvents: true,
+        orderBy: 'startTime',
+        maxResults: 250,
+      });
+      const subEvents = res.result.items || [];
+      addLog(`サブカレンダーから ${subEvents.length} 件取得`);
+
+      // ローカルで管理している同期済みイベント
+      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      const subIds = new Set(subEvents.map(e => e.id));
+
+      // 削除されたイベントの対応
+      for (const [subEventId, mainEventId] of Object.entries(stored)) {
+        if (!subIds.has(subEventId)) {
+          try {
+            await gapi.client.calendar.events.delete({ calendarId: mainId, eventId: mainEventId });
+            delete stored[subEventId];
+            addLog(`ブロック削除: ${subEventId}`);
+          } catch (e) {
+            if (e.status === 404) delete stored[subEventId];
+          }
+        }
+      }
+
+      // 新規・更新イベントの同期
+      let blockedCount = 0;
+      for (const event of subEvents) {
+        if (event.status === 'cancelled') continue;
+
+        const blockEvent = {
+          summary: '予定あり',
+          start: event.start,
+          end: event.end,
+          visibility: 'private',
+          transparency: 'opaque',
+          description: '[GCal Blocker 自動生成]',
+        };
+
+        if (stored[event.id]) {
+          // 更新
+          try {
+            await gapi.client.calendar.events.update({
+              calendarId: mainId,
+              eventId: stored[event.id],
+              resource: blockEvent,
+            });
+          } catch (e) {
+            if (e.status === 404) {
+              // 再作成
+              const created = await gapi.client.calendar.events.insert({ calendarId: mainId, resource: blockEvent });
+              stored[event.id] = created.result.id;
+              blockedCount++;
+            }
+          }
+        } else {
+          // 新規作成
+          const created = await gapi.client.calendar.events.insert({ calendarId: mainId, resource: blockEvent });
+          stored[event.id] = created.result.id;
+          blockedCount++;
+          addLog(`ブロック作成: ${event.summary || '(無題)'}`);
+        }
+      }
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+      stats.synced = subEvents.length;
+      stats.blocked += blockedCount;
+      document.getElementById('stat-synced').textContent = stats.synced;
+      document.getElementById('stat-blocked').textContent = stats.blocked;
+
+      setStatus(`同期完了 — ${subEvents.length} 件確認、${blockedCount} 件ブロック作成`, 'success');
+      addLog(`完了: ${blockedCount} 件ブロック作成`);
+
+    } catch (e) {
+      setStatus('同期エラー: ' + (e.result?.error?.message || e.message), 'error');
+      addLog('エラー: ' + (e.result?.error?.message || e.message));
+    }
+  }
+
+  function stopSync() {
+    if (syncInterval) clearInterval(syncInterval);
+    if (countdownTimer) clearInterval(countdownTimer);
+    syncInterval = null;
+    setStatus('同期を停止しました', 'info');
+    addLog('同期停止');
+    showStep('step-config');
+  }
+
+  // 保存済みクライアントIDがあれば復元
+  window.onload = () => {
+    const saved = localStorage.getItem('gcal_client_id');
+    if (saved) document.getElementById('client-id').value = saved;
+  };
+</script>
+</body>
+</html>
