@@ -91,19 +91,10 @@
 
   <!-- Step 1: Setup -->
   <div class="step active" id="step-setup">
-    <div class="setup-note">
-      <strong>初回のみ設定が必要です</strong><br>
-      1. <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> でプロジェクトを作成<br>
-      2. Google Calendar API を有効化<br>
-      3. OAuth 2.0 クライアントID を作成（種類: ウェブアプリ）<br>
-      4. 承認済みの JavaScript オリジンに <code>null</code> を追加（ローカルHTML用）<br>
-      5. クライアントIDを下に貼り付け
-    </div>
-    <div class="section">
-      <label>Google OAuth クライアントID</label>
-      <input type="text" id="client-id" placeholder="xxxx.apps.googleusercontent.com" />
-    </div>
-    <button class="btn btn-primary" onclick="initGapi()">次へ → Googleでログイン</button>
+    <p style="font-size:14px; color:#555; margin-bottom:20px;">
+      Googleアカウントでログインして、カレンダーへのアクセスを許可してください。
+    </p>
+    <button class="btn btn-primary" onclick="initGapi()">はじめる</button>
   </div>
 
   <!-- Step 2: Login -->
@@ -168,6 +159,7 @@
 </div>
 
 <script>
+  const CLIENT_ID = '730887946205-f41v57qpisa5935ajj16hd9oo44oun6f.apps.googleusercontent.com';
   const SCOPES = 'https://www.googleapis.com/auth/calendar';
   let gapiReady = false;
   let tokenClient = null;
@@ -202,9 +194,6 @@
   }
 
   function initGapi() {
-    const clientId = document.getElementById('client-id').value.trim();
-    if (!clientId) { setStatus('クライアントIDを入力してください', 'error'); return; }
-    localStorage.setItem('gcal_client_id', clientId);
     setStatus('Google API を読み込み中...', 'info');
 
     const script1 = document.createElement('script');
@@ -213,7 +202,7 @@
       gapi.load('client', async () => {
         await gapi.client.init({ discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'] });
         gapiReady = true;
-        loadTokenClient(clientId);
+        loadTokenClient(CLIENT_ID);
       });
     };
     document.head.appendChild(script1);
@@ -405,11 +394,7 @@
     showStep('step-config');
   }
 
-  // 保存済みクライアントIDがあれば復元
-  window.onload = () => {
-    const saved = localStorage.getItem('gcal_client_id');
-    if (saved) document.getElementById('client-id').value = saved;
-  };
+  window.onload = () => {};
 </script>
 </body>
 </html>
