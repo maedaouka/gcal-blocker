@@ -200,9 +200,14 @@
     script1.src = 'https://apis.google.com/js/api.js';
     script1.onload = () => {
       gapi.load('client', async () => {
-        await gapi.client.init({ discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'] });
-        gapiReady = true;
-        loadTokenClient(CLIENT_ID);
+        try {
+          await gapi.client.init({});
+          await gapi.client.load('https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest');
+          gapiReady = true;
+          loadTokenClient(CLIENT_ID);
+        } catch (e) {
+          setStatus('Google API の初期化に失敗しました。ページを再読み込みしてください。', 'error');
+        }
       });
     };
     document.head.appendChild(script1);
@@ -257,7 +262,14 @@
       if (primaryIdx >= 0) mainSel.selectedIndex = primaryIdx;
       setStatus('カレンダーを選択してください', 'info');
     } catch (e) {
-      setStatus('カレンダー取得エラー: ' + e.message, 'error');
+      const msg = e?.result?.error?.message || e?.message || JSON.stringify(e);
+      if (msg.includes('accessNotConfigured') || msg.includes('notFound')) {
+        setStatus('Google Calendar API が有効化されていません。Cloud Console で Calendar API を有効にしてください。', 'error');
+      } else if (msg.includes('401') || msg.includes('unauthorized')) {
+        setStatus('認証エラーです。もう一度ログインしてください。', 'error');
+      } else {
+        setStatus('カレンダー取得エラー: ' + msg, 'error');
+      }
     }
   }
 
